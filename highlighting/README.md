@@ -1,72 +1,183 @@
-# A Compare-and-contrast Multistage Pipeline for Uncovering Financial Signals in Financial Reports
+# Signal highlighting stage 
 
-This repo is the temporary anonymous repositary for double-blind reviews.
+This stage mainly includes the following process.
+- Out-domain fine-tuning 
+- Pseudo-labeling
+- In-domain fine-tuning
 
-We releasd our FINAL (FINancial-ALpha) dataset, including the pseudo-labeled training data and the humna-annotated labels.
+Also, we provide other codes of preprocessing and evaluaion codes (See [OTHERS.md](OTHERS.md) for detail).
 
 ---
 
-## FINAL_v1.0 Dataset
-The data used in this paper includes one (pseudo) labeled training dataset and two set of evaluation data.
+## Data preparation (e-SNLI)
 
-> The parsed dataset is based on [Software Repositary for Accounting and Finance](https://sraf.nd.edu/sec-edgar-data/), which its source contents are officially released from SEC/EDGAR. 
+- Download 
+The required dataset is [e-SNLI](https://github.com/OanaMariaCamburu/e-SNLI/tree/master/dataset/). 
+You should first donwload and save the data in [data/](data/).
+> Note there are 2 esnli trainining files; we merge the two into one standalone file.
 
-- The data definition and data statisitcs
-
-Split  | Type       | Descrption       | Number of Pairs |
----    | ---        | ---              | ---    |
-Train  | Revised    | Pseudo-label     | 30000  |
-Eval   | Revised $\mathcal(T)^{\alpha}_1$   | Human-annotation | 200    |
-Eval   | Mismatched $\mathcal(T)^{\alpha}_2$| Human-annotation | 200    |
-
-- Data example 
-Note that we use the 'jsonl' format; each line in files is an instance.
-An instance is compiled into a 'dict' object as one line in the file.
-
-Key     | contents | Descrption |
----     | ---      | ---- |              
-`sentA`   | raw text (string) | the `reference` segment in a report.
-`sentB`   | raw text (string) | the `target` segment in a report.
-`wordsA`  | a list of strings | splitted tokens of `sentA`.
-`wordsB`  | a list of strings | splitted tokens of `sentB`.
-`words`   | A list of strings | splitted tokens of `sentB` and `sentB`, seperated by `<tag>`.
-`labels`  | A list of labels (binary). | Human annotation: final binary labeling is based on agreement of annotators.
-`probs`   | A list of labels (float).  | Human annotation: final fine-grained labeling is based on the average of annontated binary `labels`.
-`keywordsA`  | a list of strings | the annotated tokens.
-`keywordsB`  | a list of strings | the annotated tokens. 
-
+- Preprocessing (e-SNLI)
+Parse the e-SNLI dataset into the following formats.
 ```
-{
-    "sentA": "Net loss for fiscal year 2014 was $836 thousand ...", 
-    "sentB": "Net income for fiscal year 2015 was $364 thousand ...",
-    "type": 1, 
-    "words": ["<tag1>", "Net", "loss", "for", "fiscal", "year", "2014", "was", "$836", "thousand", ..., ".", "<tag2>", "Net", "income", "for", "fiscal", "year", "2015", "was", "$364", "thousand", ..., ".", "<tag3>"], 
-    "wordsA": ["Net", "loss", "for", "fiscal", "year", "2014", "was", "$836", "thousand", ..., "."], 
-    "wordsB": ["Net", "income", "for", "fiscal", "year", "2015", "was", "$364", "thousand", ..., "."], 
-    "keywordsA": [], 
-    "keywordsB": ["Net", "income", "$364", "thousand", "increase", "of", "$1.2", "million"], 
-    "labels": [-1, 0, 0, 0, , -1, 1, 1, 0, 0, 0, 0, 0, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 1, 3, 3, 0, -1], 
-    "probs": [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.3333333333333333, 0.3333333333333333, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.3333333333333333, 1.0, 1.0, 0.0, -1.0]
-}
+bash run_create_esnli_data.sh
 ```
 
-## Financial signal highlighting
-Formally, we are focusing tackle the financial signal highlighting task.
-In document-level, we adopted the multistage pipeline.
+- Preprocessing (FINAL)
+Prepare the FINAL dataset with the following codes. 
+The preprocessed data has been already done; the data can be found in the [document](../README.md).
+```
+unzip final_v1.zip
+  ...
+  creating: final_v1/
+  inflating: final_v1/fin10k.annotation.mismatched.jsonl.truth
+  inflating: final_v1/fin10k.heuristic.synthetic.balance.train.revised.jsonl
+  inflating: final_v1/fin10k.annotation.revised.jsonl.truth
+```
 
-Phase | Descrption | Summary |
----   | ---        | ---     |
-S_0   | Document segmetation    | Using Cross-seg BERT to separate document (actually aggregate sentences into a segment)
-S_1   | Relation recognition    | Using ROUGE and SBERT cosine score to identify the relationship of each semgnet pairs.
-S_2 & S_2+| In-domain/Out-domain fine-tuning  | Two-stage domain-adaptive training using out-domain e-SNLI dataset and pseudo-labeld pairs with "revised" relations.
+## S2: Out-domain fine-tuning
 
-1. Document Segmentation
+### Baseline model 1: Zero-shot (esnli-zs-highligher)
+The `esnli-zs-highlighter` is the baseline highlighting models.
+Fine-tuned on the compiled e-SNLI dataset which labels are `contradiction`.
 
-> TBD
+Such model checkpoints can be found in [huggingface](#)(TBA).
 
-2. Segments Alignment
+```
+TRAIN_ESNLI=data/esnli/esnli.train.highlight.contradiction.jsonl
+EVAL_ESNLI=data/esnli/esnli.eval.highlight.contradiction.jsonl
 
-> TBD
+TYPE=esnli-zs-highlighter
+BS=24
+python3 train.py \
+  --model_name_or_path bert-base-uncased \
+  --config_name bert-base-uncased \
+  --output_dir checkpoints/$TYPE \
+  --train_file $TRAIN_ESNLI \
+  --eval_file $EVAL_ESNLI \
+  --per_device_train_batch_size $BS \
+  --max_steps 15000 \
+  --save_steps 5000 \
+  --eval_steps 5000 \
+  --max_seq_length 258 \
+  --evaluation_strategy 'steps'\
+  --evaluate_during_training \
+  --do_train \
+  --do_eval
+```
 
-3. Sentence Highlighting
-See [highlighting](highlighting/README.md) for detail.
+## S2+: In-domain fine-tuning
+We repor the detail instruction here. However, we have already done the following process; the files are save in the `final_v1.zip` file.
+That is, `final_v1/fin10k.heuristic.synthetic.balance.train.revised.jsonl`
+
+
+### Pseduo-labeling (hard-label)
+We first use the heuristic hard-label process the generate a binary labels (`label` training dataset, FINAL-train).
+See [(Build FINAL data from scratch)](OTHERS.md/#build-final-data-from-scratch).
+
+### Pseduo-labeling (soft-label)
+Once obtaining the `esnli-zh-highlighter`, we can use it to generate the pseduo-labeled dataset.
+Inference the probability as psuedo soft-label.
+
+```
+# Generate soft-labeling (Only need inferenced once)
+BS=16
+FILE=data/final_v1/fin10k.heuristic.synthetic.balance.train.type2.jsonl
+python3 inference.py \
+  --model_name_or_path checkpoints/esnli-zs-highlighter/checkpoint-10000/ \
+  --config_name bert-base-uncased \
+  --eval_file $FILE \
+  --output_file ${FILE/train/soft.train} \
+  --remove_unused_columns false \
+  --max_seq_length 512 \
+  --per_device_eval_batch_size $BS \
+  --do_eval \
+  --prob_aggregate_strategy max
+```
+
+### Baseline model 2: Pseudo few-shot
+The `pseudo-zs-highlighter` is the baseline highlighting models.
+Fine-tuned on the compiled e-SNLI dataset which labels are `contradiction`.
+
+```
+TRAIN_FIN10K=data/final_v1/fin10k.heuristic.synthetic.balance.train.type2.jsonl
+EVAL_ESNLI=data/esnli/esnli.eval.highlight.contradiction.jsonl
+
+TYPE=pseudo-few-shot
+BS=24
+python3 train.py \
+  --model_name_or_path bert-base-uncased \
+  --config_name bert-base-uncased \
+  --output_dir checkpoints/$TYPE \
+  --train_file $TRAIN_FIN10K \
+  --eval_file $EVAL_ESNLI \
+  --per_device_train_batch_size $BS \
+  --max_steps 10000 \
+  --save_steps 1500 \
+  --eval_steps 1500 \
+  --max_seq_length 512 \
+  --evaluation_strategy 'steps'\
+  --evaluate_during_training \
+  --soft_labeling false  \
+  --tau 1 \
+  --gamma 1 \
+  --do_train \
+  --do_eval
+```
+
+### Proposed model: In-domain fine-tuning (domain-adpative)
+The `domain-adpative` is our proposed highlighting models.
+Fine-tuned on the compiled FINAL_v1 dataset which is generated with psuedo hard-labeling and soft-labeling.
+
+```
+TRAIN_FIN10K=data/final_v1/fin10k.heuristic.synthetic.balance.train.type2.jsonl
+EVAL_ESNLI=data/esnli/esnli.eval.highlight.contradiction.jsonl
+
+TYPE=pseudo-few-shot
+BS=24
+python3 train.py \
+  --model_name_or_path bert-base-uncased \
+  --config_name bert-base-uncased \
+  --output_dir checkpoints/$TYPE \
+  --train_file $TRAIN_FIN10K \
+  --eval_file $EVAL_ESNLI \
+  --per_device_train_batch_size $BS \
+  --max_steps 10000 \
+  --save_steps 1500 \
+  --eval_steps 1500 \
+  --max_seq_length 512 \
+  --evaluation_strategy 'steps'\
+  --evaluate_during_training \
+  --soft_labeling false  \
+  --tau 1 \
+  --gamma 1 \
+  --do_train \
+  --do_eval
+```
+
+
+### Prediction: Inference
+Predict the total 400 pairs we have labeled, including 
+(1) mismatched (hard) with 200 sample pairs. 
+(2) revised (easy) with 200 sample pairs.
+```
+CKPT=<int, the fine-tunned steps>
+for MODEL in checkpoints/pseudo-few-shot;do
+    for TYPE in type1.easy type1.hard type2;do
+        mkdir -p results/fin10k.eval/${TYPE}
+        EVAL=data/final_v1/fin10k.eval.${TYPE}.jsonl
+        OUTPUT=${EVAL##*/}
+        echo $MODEL
+
+        python3 inference.py \
+          --model_name_or_path $MODEL/checkpoint-$CKPT/ \
+          --config_name bert-base-uncased \
+          --eval_file $EVAL \
+          --output_file results/final_v1/${TYPE}/${OUTPUT/jsonl/results}-${MODEL##*/} \
+          --remove_unused_columns false \
+          --max_seq_length 512 \
+          --per_device_eval_batch_size $BS \
+          --do_eval \
+          --prob_aggregate_strategy max
+    done
+done
+```
